@@ -14,6 +14,39 @@ function isWriter(x: unknown): x is CookieWriter {
   return !!x && typeof (x as { set?: unknown }).set === 'function';
 }
 
+export async function serverClient() {
+  // ⛔ Do not "await" cookies(); it's synchronous.
+  const jar = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        // Called by @supabase/ssr to read the session cookie
+        get(name: string) {
+          return jar.get(name)?.value;
+        },
+        // These are no-ops on Edge runtimes, but safe to call on Node
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            jar.set({ name, value, ...options });
+          } catch {
+            /* ignore on Edge */
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            jar.set({ name, value: '', ...options, maxAge: 0 });
+          } catch {
+            /* ignore on Edge */
+          }
+        },
+      },
+    }
+  );
+}
+
 export async function createServerSupabase(): Promise<SupabaseClient> {
   const store = await cookies(); // your Next version exposes async cookies()
   const reader = store as unknown as CookieReader;

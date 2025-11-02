@@ -5,7 +5,15 @@ import { createBrowserSupabase } from '@/lib/supabase-browser';
 
 type Service = { id: string; name: string };
 type Ticket = { id: string; description: string | null; status: string; created_at: string };
-type OpenShiftRow = { id: string; start_at: string | null };
+
+type Geo = { lat: number; lng: number };
+type OpenShiftRow = {
+  id: string;
+  start_at: string | null;
+  start_geo: Geo | null;
+  start_address: string | null;
+};
+
 type ApiPayload<T> = { data?: T; error?: string };
 
 function fmtTime(iso?: string | null) {
@@ -17,6 +25,36 @@ function fmtTime(iso?: string | null) {
   }
 }
 
+function fmtGeo(g?: Geo | null) {
+  if (!g) return '';
+  const { lat, lng } = g;
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+// simple in-memory cache for reverse geocode results within the session
+const addrCache = new Map<string, string>();
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+  if (addrCache.has(key)) return addrCache.get(key)!;
+
+  try {
+    const url = new URL('/api/geocode', window.location.origin);
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lng', String(lng));
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const label: string | undefined = json?.data?.label; // expected: "Brgy X, City Y, Province Z, Country"
+    if (label) {
+      addrCache.set(key, label);
+      return label;
+    }
+  } catch {
+    // swallow — best-effort only
+  }
+  return null;
+}
+
 export default function EmployeeDashboard() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
 
@@ -25,7 +63,7 @@ export default function EmployeeDashboard() {
   const [svcLoading, setSvcLoading] = useState(true);
   const [svcError, setSvcError] = useState<string | null>(null);
 
-  const [serviceId, setServiceId] = useState<string>(''); // stores UUID (string)
+  const [serviceId, setServiceId] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   const [msgs, setMsgs] = useState<Array<{ role: 'user' | 'system'; text: string }>>([]);
@@ -33,20 +71,22 @@ export default function EmployeeDashboard() {
 
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [activeStart, setActiveStart] = useState<string | null>(null);
+  const [activeGeo, setActiveGeo] = useState<Geo | null>(null);
+  const [activeAddr, setActiveAddr] = useState<string | null>(null);
 
   const [sending, setSending] = useState(false);
   const canSend =
     Boolean(serviceId && notes.trim()) && !sending && !svcLoading && services.length > 0;
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Load org → services, tickets, and open shift
+  // Load org → services, tickets, open shift (with human address if possible)
   // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       setSvcLoading(true);
       setSvcError(null);
 
-      // 1) Get org from membership
+      // 1) Which org am I in?
       const { data: membership, error: mErr } = await supabase
         .from('memberships')
         .select('org_id')
@@ -56,19 +96,19 @@ export default function EmployeeDashboard() {
       if (mErr) {
         setSvcLoading(false);
         setSvcError(mErr.message);
+        setServices([]);
         setMsgs((m) => [...m, { role: 'system', text: `❌ ${mErr.message}` }]);
         return;
       }
-
       if (!membership?.org_id) {
         setSvcLoading(false);
-        setServices([]);
         setSvcError('No membership found.');
+        setServices([]);
         setMsgs((m) => [...m, { role: 'system', text: '❌ No membership' }]);
         return;
       }
 
-      // 2) Load services for org
+      // 2) Services
       const { data: s, error: sErr } = await supabase
         .from('services')
         .select('id,name')
@@ -84,13 +124,10 @@ export default function EmployeeDashboard() {
         const list = (s as Service[]) ?? [];
         setServices(list);
         setSvcLoading(false);
-        // auto-select first option if none selected
-        if (list.length > 0 && !serviceId) {
-          setServiceId(String(list[0].id));
-        }
+        if (list.length > 0 && !serviceId) setServiceId(String(list[0].id));
       }
 
-      // 3) Load my tickets
+      // 3) My tickets
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth.user?.id;
       if (uid) {
@@ -99,17 +136,14 @@ export default function EmployeeDashboard() {
           .select('id, description, status, created_at')
           .eq('employee_id', uid)
           .order('created_at', { ascending: false });
+        if (!tErr) setMyTickets((t as Ticket[]) ?? []);
+      }
 
-        if (tErr) {
-          setMsgs((m) => [...m, { role: 'system', text: `❌ ${tErr.message}` }]);
-        } else {
-          setMyTickets((t as Ticket[]) ?? []);
-        }
-
-        // 4) Detect an open shift
+      // 4) Open shift (geo + address)
+      if (uid) {
         const { data: open, error: oErr } = await supabase
           .from('shifts')
-          .select('id, start_at')
+          .select('id, start_at, start_geo, start_address')
           .eq('user_id', uid)
           .is('end_at', null)
           .order('start_at', { ascending: false })
@@ -117,21 +151,37 @@ export default function EmployeeDashboard() {
           .maybeSingle();
 
         if (!oErr && open) {
-          setShiftId(open.id);
-          setActiveStart(open.start_at ?? null);
+          const r = open as OpenShiftRow;
+          setShiftId(r.id);
+          setActiveStart(r.start_at ?? null);
+          setActiveGeo(r.start_geo ?? null);
+          setActiveAddr(r.start_address ?? null);
+
+          // Reverse geocode only once if address is missing but geo is present
+          if (!r.start_address && r.start_geo) {
+            const addr = await reverseGeocode(r.start_geo.lat, r.start_geo.lng);
+            if (addr) {
+              setActiveAddr(addr);
+              // persist so we don't need to geocode again next load
+              await supabase.from('shifts').update({ start_address: addr }).eq('id', r.id);
+            }
+          }
         } else {
           setShiftId(null);
           setActiveStart(null);
+          setActiveGeo(null);
+          setActiveAddr(null);
         }
       }
     })();
-  }, [supabase]); // run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase]); // load once
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Utilities
   // ─────────────────────────────────────────────────────────────────────────────
   const getGeo = () =>
-    new Promise<{ lat: number; lng: number }>((resolve, reject) => {
+    new Promise<Geo>((resolve, reject) => {
       if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
       navigator.geolocation.getCurrentPosition(
         (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
@@ -192,7 +242,12 @@ export default function EmployeeDashboard() {
     if (shiftId) {
       setMsgs((m) => [
         ...m,
-        { role: 'system', text: `🟢 Already active • In since ${fmtTime(activeStart)}` },
+        {
+          role: 'system',
+          text: `🟢 Already active • In since ${fmtTime(activeStart)}${
+            activeAddr ? ` @ ${activeAddr}` : activeGeo ? ` @ ${fmtGeo(activeGeo)}` : ''
+          }`,
+        },
       ]);
       return;
     }
@@ -221,18 +276,47 @@ export default function EmployeeDashboard() {
         return;
       }
 
-      // Re-read exact start time
+      // Reload the saved row — may already contain geocoded address from backend
       let startedAt = new Date().toISOString();
+      let startedGeo: Geo | null = null;
+      let startedAddr: string | null = null;
+
       const { data: row } = await supabase
         .from('shifts')
-        .select('id,start_at')
+        .select('id,start_at,start_geo,start_address')
         .eq('id', payload.data.id)
         .single();
-      startedAt = (row as OpenShiftRow | null)?.start_at ?? startedAt;
+
+      if (row) {
+        const r = row as OpenShiftRow;
+        startedAt = r.start_at ?? startedAt;
+        startedGeo = r.start_geo ?? null;
+        startedAddr = r.start_address ?? null;
+      }
+
+      // If still missing address and we have geo, reverse-geocode and persist
+      if (!startedAddr && startedGeo) {
+        const addr = await reverseGeocode(startedGeo.lat, startedGeo.lng);
+        if (addr) {
+          startedAddr = addr;
+          await supabase.from('shifts').update({ start_address: addr }).eq('id', payload.data.id);
+        }
+      }
 
       setShiftId(payload.data.id);
       setActiveStart(startedAt);
-      setMsgs((m) => [...m, { role: 'system', text: `🟢 Shift started at ${fmtTime(startedAt)}` }]);
+      setActiveGeo(startedGeo);
+      setActiveAddr(startedAddr);
+
+      setMsgs((m) => [
+        ...m,
+        {
+          role: 'system',
+          text: `🟢 Shift started at ${fmtTime(startedAt)}${
+            startedAddr ? ` @ ${startedAddr}` : startedGeo ? ` @ ${fmtGeo(startedGeo)}` : ''
+          }`,
+        },
+      ]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setMsgs((m) => [...m, { role: 'system', text: `❌ ${msg}` }]);
@@ -270,6 +354,8 @@ export default function EmployeeDashboard() {
         const endedAt = new Date().toISOString();
         setShiftId(null);
         setActiveStart(null);
+        setActiveGeo(null);
+        setActiveAddr(null);
         setMsgs((m) => [...m, { role: 'system', text: `🔴 Shift ended at ${fmtTime(endedAt)}` }]);
       }
     } catch (e) {
@@ -288,7 +374,9 @@ export default function EmployeeDashboard() {
         {shiftId && (
           <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">
             <span className="h-2 w-2 rounded-full bg-green-500" />
+            {/* Time + human-readable location if present; else coordinates */}
             Active • In since {fmtTime(activeStart)}
+            {activeAddr ? ` @ ${activeAddr}` : activeGeo ? ` @ ${fmtGeo(activeGeo)}` : ''}
           </span>
         )}
       </div>
@@ -304,7 +392,6 @@ export default function EmployeeDashboard() {
         </div>
 
         <div className="grid gap-2 md:grid-cols-4">
-          {/* Service dropdown fed by DB (with states) */}
           <select
             className="rounded border p-2"
             value={serviceId}
@@ -313,14 +400,11 @@ export default function EmployeeDashboard() {
             disabled={svcLoading || services.length === 0}
           >
             {svcLoading && <option value="">Loading services…</option>}
-
             {!svcLoading && services.length === 0 && (
               <option value="">No services available</option>
             )}
-
             {!svcLoading && services.length > 0 && (
               <>
-                {/* Optional placeholder; remove if you auto-select */}
                 <option value="" disabled>
                   Service…
                 </option>

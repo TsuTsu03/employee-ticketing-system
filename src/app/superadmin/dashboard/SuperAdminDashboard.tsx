@@ -67,10 +67,18 @@ export default function SuperAdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const { data, error } = (await res.json()) as { data?: Org; error?: string };
-      if (error) return setMsg(error);
-      if (data) {
-        setOrgs((x) => [data, ...x]);
+
+      const text = await res.text();
+      let body: { data?: Org; error?: string } = {};
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = { error: `Invalid response (${res.status})` };
+      }
+
+      if (!res.ok || body.error) return setMsg(body.error ?? `HTTP ${res.status}`);
+      if (body.data) {
+        setOrgs((x) => [body.data!, ...x]);
         setNewOrg({ name: '', slug: '' });
       }
     } catch (e) {
@@ -83,8 +91,10 @@ export default function SuperAdminDashboard() {
   async function createService() {
     if (!svc.org_id) return setMsg('Select an organization.');
     if (!svc.name.trim()) return setMsg('Service name is required.');
+
     setPending(true);
     setMsg(null);
+
     try {
       const res = await fetch('/api/services', {
         method: 'POST',
@@ -92,15 +102,24 @@ export default function SuperAdminDashboard() {
         body: JSON.stringify({
           org_id: svc.org_id,
           name: svc.name.trim(),
-          description: svc.description.trim() || null,
+          description: svc.description.trim() ? svc.description.trim() : null,
         }),
       });
-      const { data, error } = (await res.json()) as { data?: Service; error?: string };
-      if (error) return setMsg(error);
-      if (data) {
-        setServices((x) => [data, ...x]);
-        setSvc({ org_id: '', name: '', description: '' });
+
+      const text = await res.text();
+      let body: { data?: Service; error?: string } = {};
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = { error: `Invalid response (${res.status})` };
       }
+
+      if (!res.ok || body.error || !body.data) {
+        return setMsg(body.error ?? `HTTP ${res.status}`);
+      }
+
+      setServices((x) => [body.data!, ...x]);
+      setSvc({ org_id: '', name: '', description: '' });
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Create service failed');
     } finally {
@@ -118,8 +137,14 @@ export default function SuperAdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      const { data, error } = (await res.json()) as { data?: { status: string }; error?: string };
-      if (error || !data) throw new Error(error || 'Update failed');
+      const text = await res.text();
+      let body: { data?: { status: string }; error?: string } = {};
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = { error: `Invalid response (${res.status})` };
+      }
+      if (!res.ok || body.error || !body.data) throw new Error(body.error ?? `HTTP ${res.status}`);
     } catch (e) {
       setTickets(prev);
       setMsg(e instanceof Error ? e.message : 'Update status failed');
@@ -137,6 +162,12 @@ export default function SuperAdminDashboard() {
           </a>
         }
       />
+
+      {msg && (
+        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {msg}
+        </div>
+      )}
 
       {/* Organizations */}
       <section className="card p-6">
@@ -156,8 +187,8 @@ export default function SuperAdminDashboard() {
             value={newOrg.slug}
             onChange={(e) => setNewOrg({ ...newOrg, slug: e.target.value })}
           />
-          <button className="btn btn--primary" onClick={createOrg}>
-            Create
+          <button className="btn btn--primary" onClick={createOrg} disabled={pending}>
+            {pending ? 'Working…' : 'Create'}
           </button>
         </div>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3">
@@ -200,8 +231,8 @@ export default function SuperAdminDashboard() {
             value={svc.description}
             onChange={(e) => setSvc({ ...svc, description: e.target.value })}
           />
-          <button className="btn btn--primary" onClick={createService}>
-            Add
+          <button className="btn btn--primary" onClick={createService} disabled={pending}>
+            {pending ? 'Adding…' : 'Add'}
           </button>
         </div>
         <ul className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3">
