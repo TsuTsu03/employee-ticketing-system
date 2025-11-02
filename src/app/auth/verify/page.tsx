@@ -1,6 +1,9 @@
 // File: app/auth/verify/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
+import { Suspense } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserSupabase } from '@/lib/supabase-browser';
@@ -17,6 +20,14 @@ const OTP_TYPES: readonly OtpType[] = [
 ] as const;
 
 export default function VerifyPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md p-6">Verifying…</div>}>
+      <VerifyClient />
+    </Suspense>
+  );
+}
+
+function VerifyClient() {
   const search = useSearchParams();
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabase(), []);
@@ -28,7 +39,6 @@ export default function VerifyPage() {
   useEffect(() => {
     (async () => {
       setMsg(null);
-
       try {
         const rawType = (search.get('type') ?? '').toLowerCase();
         if (!OTP_TYPES.includes(rawType as OtpType)) {
@@ -41,11 +51,9 @@ export default function VerifyPage() {
         const email = search.get('email') ?? undefined;
 
         if (tokenHash) {
-          const payload = {
-            type,
-            token_hash: tokenHash,
-          } satisfies Parameters<typeof supabase.auth.verifyOtp>[0];
-
+          const payload = { type, token_hash: tokenHash } satisfies Parameters<
+            typeof supabase.auth.verifyOtp
+          >[0];
           const { error } = await supabase.auth.verifyOtp(payload);
           if (error) throw error;
           setStep('set-password');
@@ -53,12 +61,9 @@ export default function VerifyPage() {
         }
 
         if (token && email) {
-          const payload = {
-            type,
-            token,
-            email,
-          } satisfies Parameters<typeof supabase.auth.verifyOtp>[0];
-
+          const payload = { type, token, email } satisfies Parameters<
+            typeof supabase.auth.verifyOtp
+          >[0];
           const { error } = await supabase.auth.verifyOtp(payload);
           if (error) throw error;
           setStep('set-password');
