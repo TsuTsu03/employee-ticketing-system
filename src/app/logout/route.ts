@@ -16,7 +16,6 @@ function redirectToLogin() {
 
 export async function GET() {
   const supabase = await serverClient();
-  // ignore any error; we just want to drop session cookies
   await supabase.auth.signOut();
   return redirectToLogin();
 }
