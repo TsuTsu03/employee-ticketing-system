@@ -98,7 +98,6 @@ function MessageBubble({ role, children }: { role: MsgRole; children: React.Reac
       <div
         className={[
           'rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap',
-          // mobile bubble width similar to ChatGPT
           'max-w-[88%] sm:max-w-[75%]',
           isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
         ].join(' ')}
@@ -133,6 +132,35 @@ function QuickChips({ onAction }: { onAction: (a: ChatButton['action']) => void 
         ))}
       </div>
     </div>
+  );
+}
+
+/** Compact, truncating badge to prevent mobile overflow */
+function ActiveBadge({
+  startedAt,
+  addr,
+  geo,
+}: {
+  startedAt: string | null;
+  addr: string | null;
+  geo: Geo | null;
+}) {
+  const full = `Attivo • Entrato alle ${fmtTime(startedAt)}${
+    addr ? ` @ ${addr}` : geo ? ` @ ${fmtGeo(geo)}` : ''
+  }`;
+
+  return (
+    <Badge
+      variant="secondary"
+      title={full}
+      className="max-w-[70vw] min-w-0 truncate rounded-full py-1 pr-3 pl-2 text-[11px] text-emerald-700 sm:max-w-none sm:text-xs"
+    >
+      <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />
+      {/* Short on mobile */}
+      <span className="sm:hidden">Attivo • {fmtTime(startedAt)}</span>
+      {/* Full on ≥sm */}
+      <span className="hidden sm:inline">{full}</span>
+    </Badge>
   );
 }
 
@@ -692,7 +720,7 @@ export default function EmployeeDashboard() {
   const initials = (userEmail ?? 'U').slice(0, 2).toUpperCase();
 
   return (
-    <div className="bg-background min-h-[100svh]">
+    <div className="bg-background min-h-[100svh] overflow-x-hidden">
       {/* Mobile-first grid; sidebar only on md+ */}
       <div className="mx-auto grid min-h-[100svh] w-full max-w-screen-sm grid-cols-1 md:max-w-none md:grid-cols-[300px_1fr]">
         {/* Sidebar (hidden on mobile) */}
@@ -731,12 +759,12 @@ export default function EmployeeDashboard() {
         {/* Main */}
         <main className="flex h-[100svh] max-h-[100svh] flex-col md:h-screen md:max-h-screen">
           {/* Header (compact padding, sticky) */}
-          <header className="bg-background/80 sticky top-0 z-20 flex items-center justify-between border-b px-3 py-2 backdrop-blur-sm sm:px-4 sm:py-3">
-            <div className="flex items-center gap-2">
+          <header className="bg-background/80 sticky top-0 z-20 flex flex-col gap-2 border-b px-3 py-2 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
+            <div className="flex min-w-0 items-center gap-2">
               {/* Mobile: open history */}
               <Sheet open={histOpen} onOpenChange={setHistOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="rounded-full md:hidden">
+                  <Button variant="ghost" size="sm" className="shrink-0 rounded-full md:hidden">
                     Menu
                   </Button>
                 </SheetTrigger>
@@ -783,28 +811,24 @@ export default function EmployeeDashboard() {
                 </SheetContent>
               </Sheet>
 
-              <h1 className="text-sm font-semibold sm:text-base">Dipendenti — Workspace</h1>
+              <h1 className="truncate text-sm font-semibold sm:text-base">
+                Dipendenti — Workspace
+              </h1>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
               <Sheet open={ticketsOpen} onOpenChange={(o) => (o ? openTickets() : closeTickets())}>
                 <SheetTrigger asChild>
-                  <Button variant="secondary" className="rounded-full px-3 py-1 text-xs sm:text-sm">
+                  <Button
+                    variant="secondary"
+                    className="shrink-0 rounded-full px-3 py-1 text-xs whitespace-nowrap sm:text-sm"
+                  >
                     Le mie Segnalazioni
                   </Button>
                 </SheetTrigger>
               </Sheet>
 
-              {shiftId && (
-                <Badge
-                  variant="secondary"
-                  className="rounded-full py-1 pr-3 pl-2 text-[11px] text-emerald-700 sm:text-xs"
-                >
-                  <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                  Attivo • Entrato alle {fmtTime(activeStart)}
-                  {activeAddr ? ` @ ${activeAddr}` : activeGeo ? ` @ ${fmtGeo(activeGeo)}` : ''}
-                </Badge>
-              )}
+              {shiftId && <ActiveBadge startedAt={activeStart} addr={activeAddr} geo={activeGeo} />}
             </div>
           </header>
 
