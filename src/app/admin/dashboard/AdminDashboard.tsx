@@ -52,7 +52,7 @@ import {
   LogOut,
 } from 'lucide-react';
 
-/* ---------- Types ---------- */
+/* ---------- Tipi ---------- */
 const RoleEnum = z.enum(['SUPER_ADMIN', 'ADMIN', 'EMPLOYEE']);
 type Role = z.infer<typeof RoleEnum>;
 
@@ -63,7 +63,7 @@ const OrgSchema = z.object({
 });
 type Org = z.infer<typeof OrgSchema>;
 
-/** Rows returned by RPC: get_members(p_org_id uuid) */
+/** Righe restituite dall'RPC: get_members(p_org_id uuid) */
 const RpcMemberRowSchema = z.object({
   user_id: z.string().uuid(),
   org_id: z.string().uuid(),
@@ -73,7 +73,7 @@ const RpcMemberRowSchema = z.object({
 });
 type RpcMemberRow = z.infer<typeof RpcMemberRowSchema>;
 
-/** Accepts RFC3339 with timezone offsets (e.g., +00:00) */
+/** Accetta RFC3339 con fuso orario (es. +00:00) */
 const ShiftRowSchema = z.object({
   id: z.string().uuid(),
   org_id: z.string().uuid(),
@@ -85,7 +85,7 @@ type ShiftRow = z.infer<typeof ShiftRowSchema>;
 
 type ApiResult<T> = { data?: T; error?: string };
 
-/* ---------- Utils ---------- */
+/* ---------- Util ---------- */
 function cn(...cls: Array<string | false | undefined>) {
   return cls.filter(Boolean).join(' ');
 }
@@ -94,7 +94,7 @@ const fmtNumber = (n: number) =>
 const fmtCurrency = (n: number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
 
-/* ---------- Component ---------- */
+/* ---------- Componente ---------- */
 export default function AdminDashboard() {
   const sb = useMemo(() => createBrowserSupabase(), []);
   const router = useRouter();
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
 
   const onlyOneOrg = orgs.length === 1;
 
-  /* Auto-dismiss banner after 5s */
+  /* Auto-dismiss banner dopo 5s */
   useEffect(() => {
     if (!msg) return;
     const id = setTimeout(() => setMsg(null), 5000);
@@ -130,7 +130,7 @@ export default function AdminDashboard() {
       const r = u as ApiResult<T>;
       return { data: r.data, error: r.error };
     }
-    return { error: 'Invalid response' };
+    return { error: 'Risposta non valida' };
   }
 
   const duration = (s: ShiftRow) => {
@@ -142,7 +142,7 @@ export default function AdminDashboard() {
     return `${h}h ${m}m`;
   };
 
-  /* Load organizations via RPC (my_org_rows) */
+  /* Carica organizzazioni via RPC (my_org_rows) */
   useEffect(() => {
     (async () => {
       setMsg(null);
@@ -153,16 +153,16 @@ export default function AdminDashboard() {
         setOrgs(list);
         setOrgId((prev) => prev || list[0]?.id || '');
       } catch (e) {
-        const m = e instanceof Error ? e.message : 'Failed to load organizations';
-        console.error('Load orgs error:', m);
-        setMsg(`Failed to load organizations: ${m}`);
+        const m = e instanceof Error ? e.message : 'Impossibile caricare le organizzazioni';
+        console.error('Errore caricamento org:', m);
+        setMsg(`Impossibile caricare le organizzazioni: ${m}`);
         setOrgs([]);
         setOrgId('');
       }
     })();
   }, [sb]);
 
-  /* Load members + shifts of selected org */
+  /* Carica membri + turni dell’organizzazione selezionata */
   useEffect(() => {
     if (!orgId) return;
     const ac = new AbortController();
@@ -187,8 +187,8 @@ export default function AdminDashboard() {
         setShifts(z.array(ShiftRowSchema).parse(shRes.data ?? []));
       } catch (e) {
         if (!ac.signal.aborted) {
-          const m = e instanceof Error ? e.message : 'Failed to load data';
-          console.error('Load members/shifts error:', m);
+          const m = e instanceof Error ? e.message : 'Impossibile caricare i dati';
+          console.error('Errore membri/turni:', m);
           setMsg(m);
         }
       }
@@ -196,7 +196,7 @@ export default function AdminDashboard() {
     return () => ac.abort();
   }, [sb, orgId, from, to]);
 
-  /* Actions */
+  /* Azioni */
   async function refreshMembers() {
     const res = await sb.rpc('get_members', { p_org_id: orgId });
     if (res.error) {
@@ -208,10 +208,11 @@ export default function AdminDashboard() {
   }
 
   async function createUser() {
-    if (!orgId) return setMsg('Select an organization.');
-    if (!form.email.trim()) return setMsg('Email required.');
+    if (!orgId) return setMsg('Seleziona un’organizzazione.');
+    if (!form.email.trim()) return setMsg('Email obbligatoria.');
     const EmailSchema = z.string().email();
-    if (!EmailSchema.safeParse(form.email.trim()).success) return setMsg('Enter a valid email.');
+    if (!EmailSchema.safeParse(form.email.trim()).success)
+      return setMsg('Inserisci un’email valida.');
 
     setPending(true);
     setMsg(null);
@@ -232,10 +233,10 @@ export default function AdminDashboard() {
       else {
         await refreshMembers();
         setForm({ email: '', full_name: '', role: 'EMPLOYEE', invite: true });
-        setMsg('User created.');
+        setMsg('Utente creato.');
       }
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : 'Failed');
+      setMsg(e instanceof Error ? e.message : 'Operazione non riuscita');
     } finally {
       setPending(false);
     }
@@ -254,30 +255,29 @@ export default function AdminDashboard() {
   }
 
   async function handleSignOut() {
-    // Why: redirect after clearing session to avoid stale state
     try {
       setSigningOut(true);
       const { error } = await sb.auth.signOut();
       if (error) throw error;
-      router.push('/auth/login'); // adjust to your auth route
+      router.push('/auth/login');
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Failed to sign out');
+      setMsg(e instanceof Error ? e.message : 'Disconnessione non riuscita');
     } finally {
       setSigningOut(false);
     }
   }
 
-  /* Derived placeholders for KPI */
+  /* Placeholder KPI derivati */
   const activeNow = Math.max(0, shifts.filter((s) => s.start_at && !s.end_at).length);
   const subscriptions = members.length;
   const salesCount = Math.round(shifts.length * 1.2); // placeholder
   const totalRevenue = salesCount * 37; // placeholder
 
   return (
-    <div className="grid gap-6 p-4">
+    <div className="p-3 sm:p-4">
       <PageHeader title="Admin — Dashboard" />
 
-      {/* Status banner */}
+      {/* Banner di stato */}
       {msg && (
         <div
           className={cn(
@@ -291,44 +291,44 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Top nav & quick actions */}
-      <Tabs defaultValue="overview" className="w-full shadow-lg">
-        <div className="flex flex-col gap-3 shadow-lg sm:flex-row sm:items-center sm:justify-between">
-          <TabsList className="h-9 bg-transparent">
+      {/* Tabs e azioni (stack su mobile) */}
+      <Tabs defaultValue="overview" className="w-full">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="h-9 self-start bg-transparent">
             <TabsTrigger
               value="overview"
               className="data-[state=active]:bg-black data-[state=active]:text-white"
             >
-              Overview
+              Panoramica
             </TabsTrigger>
             <TabsTrigger
               value="analytics"
               className="data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              Analytics
+              Analisi
             </TabsTrigger>
             <TabsTrigger
               value="reports"
               className="data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              Reports
+              Report
             </TabsTrigger>
             <TabsTrigger
               value="notifications"
               className="data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              Notifications
+              Notifiche
             </TabsTrigger>
           </TabsList>
 
-          <div className="mb-2 flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Select
               value={orgId}
               onValueChange={(v) => setOrgId(v)}
               disabled={onlyOneOrg || orgs.length === 0}
             >
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Select organization" />
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue placeholder="Seleziona organizzazione" />
               </SelectTrigger>
               <SelectContent>
                 {orgs.map((o) => (
@@ -339,107 +339,109 @@ export default function AdminDashboard() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" className="gap-2">
-              <Download className="h-4 w-4" />
-              Download
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="gap-2">
+                <Download className="h-4 w-4" />
+                Scarica
+              </Button>
 
-            {/* Sign out */}
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={handleSignOut}
-              disabled={signingOut}
-            >
-              <LogOut className="h-4 w-4" />
-              {signingOut ? 'Signing out…' : 'Sign out'}
-            </Button>
+              {/* Esci */}
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleSignOut}
+                disabled={signingOut}
+              >
+                <LogOut className="h-4 w-4" />
+                {signingOut ? 'Disconnessione…' : 'Esci'}
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* KPI cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* KPI cards (1 col su mobile) */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium">Ricavi Totali</CardTitle>
               <DollarSign className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{fmtCurrency(totalRevenue)}</div>
-              <p className="text-xs opacity-70">+20.1% from last month</p>
+              <p className="text-xs opacity-70">+20.1% rispetto al mese scorso</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Subscriptions</CardTitle>
+              <CardTitle className="text-sm font-medium">Iscrizioni</CardTitle>
               <Users2 className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">+{fmtNumber(subscriptions)}</div>
-              <p className="text-xs opacity-70">+180.1% from last month</p>
+              <p className="text-xs opacity-70">+180.1% rispetto al mese scorso</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sales</CardTitle>
+              <CardTitle className="text-sm font-medium">Vendite</CardTitle>
               <TrendingUp className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">+{fmtNumber(salesCount)}</div>
-              <p className="text-xs opacity-70">+19% from last month</p>
+              <p className="text-xs opacity-70">+19% rispetto al mese scorso</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Now</CardTitle>
+              <CardTitle className="text-sm font-medium">Attivi Ora</CardTitle>
               <Activity className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">+{fmtNumber(activeNow)}</div>
-              <p className="text-xs opacity-70">+201 since last hour</p>
+              <p className="text-xs opacity-70">+201 dall’ultima ora</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main content grid */}
-        <div className="grid gap-4 lg:grid-cols-3">
+        {/* Griglia principale (1 col su mobile; 2 + rail su desktop) */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <div className="grid gap-4 lg:col-span-2">
-            {/* Create user */}
+            {/* Crea utente */}
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Create employee account</CardTitle>
-                <CardDescription>Invite or add a user with a role.</CardDescription>
+                <CardTitle>Crea account dipendente</CardTitle>
+                <CardDescription>Invita o aggiungi un utente con un ruolo.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-5">
                 <div className="space-y-1 md:col-span-2">
-                  <Label htmlFor="email">Work email</Label>
+                  <Label htmlFor="email">Email di lavoro</Label>
                   <Input
                     id="email"
-                    placeholder="name@company.com"
+                    placeholder="nome@azienda.com"
                     value={form.email}
                     onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1 md:col-span-2">
-                  <Label htmlFor="full_name">Full name (optional)</Label>
+                  <Label htmlFor="full_name">Nome completo (opzionale)</Label>
                   <Input
                     id="full_name"
-                    placeholder="Jane Doe"
+                    placeholder="Mario Rossi"
                     value={form.full_name}
                     onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Role</Label>
+                  <Label>Ruolo</Label>
                   <Select
                     value={form.role}
                     onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
+                      <SelectValue placeholder="Seleziona ruolo" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="EMPLOYEE">EMPLOYEE</SelectItem>
@@ -456,149 +458,155 @@ export default function AdminDashboard() {
                     onChange={(e) => setForm((f) => ({ ...f, invite: e.target.checked }))}
                   />
                   <Label htmlFor="invite" className="text-sm">
-                    Send invite email (user sets password)
+                    Invia email di invito (l’utente imposta la password)
                   </Label>
                 </div>
               </CardContent>
               <CardFooter className="justify-end">
                 <Button onClick={createUser} disabled={pending || !orgId} className="gap-2">
                   <Shield className="h-4 w-4" />
-                  {pending ? 'Creating…' : 'Create'}
+                  {pending ? 'Creazione…' : 'Crea'}
                 </Button>
               </CardFooter>
             </Card>
 
-            {/* Members */}
+            {/* Membri (tabella scrollabile su mobile) */}
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Members</CardTitle>
-                <CardDescription>Manage roles per member.</CardDescription>
+                <CardTitle>Membri</CardTitle>
+                <CardDescription>Gestisci i ruoli per membro.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-left">User</TableHead>
-                      <TableHead className="text-left">Email</TableHead>
-                      <TableHead className="w-[170px]">Role</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {members.map((m) => (
-                      <TableRow key={m.user_id}>
-                        <TableCell className="text-sm">
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-7 w-7">
-                              <AvatarFallback>
-                                {(m.full_name || '??')
-                                  .split(' ')
-                                  .map((p) => p[0])
-                                  .join('')
-                                  .slice(0, 2)
-                                  .toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span>{m.full_name ?? m.user_id.slice(0, 8)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">{m.email ?? '—'}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={m.role}
-                            onValueChange={(v) => updateRole(m.user_id, v as Role)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="EMPLOYEE">EMPLOYEE</SelectItem>
-                              <SelectItem value="ADMIN">ADMIN</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[640px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-left">Utente</TableHead>
+                        <TableHead className="text-left">Email</TableHead>
+                        <TableHead className="w-[170px]">Ruolo</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {members.map((m) => (
+                        <TableRow key={m.user_id}>
+                          <TableCell className="text-sm">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback>
+                                  {(m.full_name || '??')
+                                    .split(' ')
+                                    .map((p) => p[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{m.full_name ?? m.user_id.slice(0, 8)}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{m.email ?? '—'}</TableCell>
+                          <TableCell>
+                            <Select
+                              value={m.role}
+                              onValueChange={(v) => updateRole(m.user_id, v as Role)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="EMPLOYEE">EMPLOYEE</SelectItem>
+                                <SelectItem value="ADMIN">ADMIN</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
                 {members.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">No members yet.</div>
+                  <div className="p-8 text-center text-sm opacity-70">Ancora nessun membro.</div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Shifts */}
+            {/* Turni (tabella scrollabile + filtri compatti) */}
             <Card className="shadow-lg">
               <CardHeader className="space-y-2">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle>Shifts (time-in/out)</CardTitle>
-                    <CardDescription>Tracked clock-ins for selected range.</CardDescription>
+                    <CardTitle>Turni (entrata/uscita)</CardTitle>
+                    <CardDescription>Timbrature tracciate per l’intervallo scelto.</CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="xs:flex-row flex flex-col gap-2 sm:flex-row sm:items-center">
                     <div className="relative">
                       <CalendarDays className="pointer-events-none absolute top-2.5 left-2 h-4 w-4 opacity-70" />
                       <Input
                         type="date"
                         value={from}
                         onChange={(e) => setFrom(e.target.value)}
-                        className="w-[10.5rem] pl-8"
+                        className="w-[11.25rem] pl-8"
                       />
                     </div>
-                    <span className="opacity-70">—</span>
+                    <span className="hidden opacity-70 sm:inline">—</span>
                     <div className="relative">
                       <CalendarDays className="pointer-events-none absolute top-2.5 left-2 h-4 w-4 opacity-70" />
                       <Input
                         type="date"
                         value={to}
                         onChange={(e) => setTo(e.target.value)}
-                        className="w-[10.5rem] pl-8"
+                        className="w-[11.25rem] pl-8"
                       />
                     </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-left">User</TableHead>
-                      <TableHead>Start</TableHead>
-                      <TableHead>End</TableHead>
-                      <TableHead>Duration</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {shifts.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="text-sm">
-                          {members.find((m) => m.user_id === s.user_id)?.full_name ??
-                            s.user_id.slice(0, 8)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {s.start_at ? new Date(s.start_at).toLocaleString() : '—'}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {s.end_at ? new Date(s.end_at).toLocaleString() : '—'}
-                        </TableCell>
-                        <TableCell className="text-sm">{duration(s)}</TableCell>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[720px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-left">Utente</TableHead>
+                        <TableHead>Inizio</TableHead>
+                        <TableHead>Fine</TableHead>
+                        <TableHead>Durata</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {shifts.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="text-sm">
+                            {members.find((m) => m.user_id === s.user_id)?.full_name ??
+                              s.user_id.slice(0, 8)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {s.start_at ? new Date(s.start_at).toLocaleString() : '—'}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {s.end_at ? new Date(s.end_at).toLocaleString() : '—'}
+                          </TableCell>
+                          <TableCell className="text-sm">{duration(s)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
                 {shifts.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">No shifts in range.</div>
+                  <div className="p-8 text-center text-sm opacity-70">
+                    Nessun turno nell’intervallo.
+                  </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Right rail: Recent Sales-like card */}
+          {/* Rail destro: Attività recente */}
           <div className="grid gap-4">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
+                <CardTitle>Attività recente</CardTitle>
                 <CardDescription>
-                  You made {fmtNumber(shifts.length)} shifts this range.
+                  Hai registrato {fmtNumber(shifts.length)} turni in questo intervallo.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0">
@@ -631,7 +639,7 @@ export default function AdminDashboard() {
                       </div>
                     ))}
                     {members.length === 0 && (
-                      <div className="py-6 text-center text-sm opacity-70">Nothing yet.</div>
+                      <div className="py-6 text-center text-sm opacity-70">Nessuna attività.</div>
                     )}
                   </div>
                 </ScrollArea>

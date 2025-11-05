@@ -58,6 +58,25 @@ const EyeOffIcon = (p: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+/** Italian copy (single source of truth) */
+const it = {
+  title: 'Bentornato',
+  subtitle: 'Accedi per continuare',
+  emailLabel: 'Email',
+  emailPlaceholder: 'tuo@azienda.com',
+  passwordLabel: 'Password',
+  passwordPlaceholder: '••••••••',
+  forgot: 'Hai dimenticato la password?',
+  capsOn: 'Bloc Maiusc attivo.',
+  signingIn: 'Accesso in corso…',
+  signIn: 'Accedi',
+  needAccount: 'Ti serve un account?',
+  contactAdmin: 'Contatta il tuo amministratore per essere invitato.',
+  showPwd: 'Mostra password',
+  hidePwd: 'Nascondi password',
+  unexpected: 'Errore imprevisto',
+};
+
 export default function LoginPage() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
   const router = useRouter();
@@ -81,7 +100,8 @@ export default function LoginPage() {
       }
       router.push('/portal');
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Unexpected error');
+      // why: avoid leaking objects, keep message human-friendly
+      setMsg(err instanceof Error ? err.message : it.unexpected);
     } finally {
       setPending(false);
     }
@@ -89,38 +109,43 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-[radial-gradient(1200px_600px_at_80%_-10%,hsl(var(--primary)/0.12),transparent),radial-gradient(1000px_500px_at_-20%_110%,hsl(var(--accent)/0.12),transparent)]">
-      <div className="mx-auto grid max-w-lg gap-6 px-4 py-12">
-        <PageHeader title="Welcome back" subtitle="Sign in to continue" />
+      <div className="mx-auto grid w-full max-w-md gap-6 px-4 pt-8 pb-10 sm:max-w-lg sm:gap-8 sm:px-6 sm:pt-12">
+        <PageHeader title={it.title} subtitle={it.subtitle} />
 
-        <form onSubmit={onSubmit} className="card rounded-2xl p-6 sm:p-8">
-          <div className="grid gap-5">
+        <form
+          onSubmit={onSubmit}
+          className="card rounded-2xl p-5 shadow-sm sm:p-7"
+          aria-label="Modulo di accesso"
+        >
+          <div className="grid gap-5 sm:gap-6">
             {/* Email */}
             <div className="grid gap-1.5">
-              <label htmlFor="email" className="text-sm font-medium">
-                Email
+              <label htmlFor="email" className="text-sm font-medium sm:text-base">
+                {it.emailLabel}
               </label>
 
               {/* input shell */}
               <div
                 className={[
-                  'relative flex h-11 items-center rounded-xl border pl-3',
+                  'relative flex h-12 items-center rounded-xl border pl-3',
                   'border-[rgb(var(--border))]',
+                  'focus-within:border-[rgb(var(--primary))] focus-within:ring-2 focus-within:ring-[rgb(var(--primary))]',
                 ].join(' ')}
               >
                 <span className="pointer-events-none absolute left-3 inline-flex items-center text-[rgb(var(--muted))]">
-                  <MailIcon className="h-5 w-5" />
+                  <MailIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </span>
                 <input
                   id="email"
                   type="email"
                   inputMode="email"
-                  placeholder="you@company.com"
+                  placeholder={it.emailPlaceholder}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
                   required
-                  // IMPORTANT: override your global .input paddings
-                  className="input !h-10 !border-0 !bg-transparent !pr-3 !pb-3 !pl-6 !ring-0 !outline-none"
+                  autoFocus
+                  className="input h-11 w-full !border-0 bg-transparent pr-3 !pb-2 !pl-7 ring-0 outline-none"
                 />
               </div>
             </div>
@@ -128,33 +153,33 @@ export default function LoginPage() {
             {/* Password */}
             <div className="grid gap-1.5">
               <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
+                <label htmlFor="password" className="text-sm font-medium sm:text-base">
+                  {it.passwordLabel}
                 </label>
                 <a
                   href="/auth/reset"
-                  className="text-xs text-[rgb(var(--primary))] hover:underline"
+                  className="text-xs text-[rgb(var(--primary))] underline-offset-2 hover:underline sm:text-sm"
                 >
-                  Forgot?
+                  {it.forgot}
                 </a>
               </div>
 
               {/* input shell */}
               <div
                 className={[
-                  'relative flex h-11 items-center rounded-xl border px-3',
+                  'relative flex h-12 items-center rounded-xl border px-3',
                   'border-[rgb(var(--border))] transition',
                   'focus-within:border-[rgb(var(--primary))] focus-within:ring-2 focus-within:ring-[rgb(var(--primary))]',
                 ].join(' ')}
               >
                 <span className="pointer-events-none absolute left-3 inline-flex items-center text-[rgb(var(--muted))]">
-                  <LockIcon className="h-5 w-5" />
+                  <LockIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </span>
 
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
+                  placeholder={it.passwordPlaceholder}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
@@ -162,25 +187,12 @@ export default function LoginPage() {
                   minLength={6}
                   autoComplete="current-password"
                   required
-                  className="input h-10! w-full! border-0! !bg-transparent !pr-12 !pl-6 !ring-0 !outline-none"
+                  className="input h-11 w-full !border-0 bg-transparent !pl-7 ring-0 outline-none"
                 />
-
-                <button
-                  type="button"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="hover:text-foreground absolute right-2 grid h-8 w-8 place-items-center rounded-md text-[rgb(var(--muted))] hover:bg-[rgb(var(--muted))/0.08]"
-                >
-                  {showPassword ? (
-                    <EyeOffIcon className="h-5 w-5" />
-                  ) : (
-                    <EyeIcon className="h-5 w-5" />
-                  )}
-                </button>
               </div>
 
               {capsLock && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">Caps Lock is ON.</p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">{it.capsOn}</p>
               )}
             </div>
 
@@ -196,7 +208,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={pending}
-              className="btn relative h-11 rounded-xl border-2 border-black font-medium tracking-tight disabled:cursor-not-allowed disabled:opacity-70"
+              className={[
+                'btn relative h-12 rounded-xl border-2 border-black font-medium tracking-tight',
+                'disabled:cursor-not-allowed disabled:opacity-70',
+                'active:scale-[0.99]',
+              ].join(' ')}
             >
               {pending && (
                 <span
@@ -204,12 +220,12 @@ export default function LoginPage() {
                   aria-hidden
                 />
               )}
-              {pending ? 'Signing in…' : 'Sign in'}
+              {pending ? it.signingIn : it.signIn}
             </button>
 
-            <p className="text-center text-sm text-[rgb(var(--muted))]">
-              Need an account?{' '}
-              <span className="text-foreground font-medium">Contact your admin to be invited.</span>
+            <p className="text-center text-sm text-[rgb(var(--muted))] sm:text-base">
+              {it.needAccount}{' '}
+              <span className="text-foreground font-medium">{it.contactAdmin}</span>
             </p>
           </div>
         </form>

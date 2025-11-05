@@ -28,10 +28,10 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-/* icons */
+/* icone */
 import { Building2, Cog, Ticket, Download, ShieldPlus, LogOut, TrendingUp } from 'lucide-react';
 
-/* ---------- Types ---------- */
+/* ---------- Tipi ---------- */
 type Org = { id: string; name: string; slug: string; is_active?: boolean };
 type Service = { id: string; org_id: string; name: string; description: string | null };
 type TicketRow = {
@@ -42,7 +42,7 @@ type TicketRow = {
   created_at: string;
 };
 
-/* ---------- Utils ---------- */
+/* ---------- Util ---------- */
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -54,7 +54,7 @@ function cn(...cls: Array<string | false | undefined>) {
   return cls.filter(Boolean).join(' ');
 }
 
-/* ---------- Component ---------- */
+/* ---------- Componente ---------- */
 export default function SuperAdminDashboard() {
   const supabase = useMemo(() => createBrowserSupabase(), []);
   const router = useRouter();
@@ -85,27 +85,26 @@ export default function SuperAdminDashboard() {
         setServices((s as Service[]) ?? []);
         setTickets((t as TicketRow[]) ?? []);
       } catch (e) {
-        setMsg(e instanceof Error ? e.message : 'Failed to load data');
+        setMsg(e instanceof Error ? e.message : 'Impossibile caricare i dati');
       }
     })();
   }, [supabase]);
 
   async function handleSignOut() {
-    // Why: hard redirect after clearing session avoids stale UI
     try {
       setSigningOut(true);
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      router.push('/auth/login'); // adjust to your sign-in route
+      router.push('/auth/login');
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Failed to sign out');
+      setMsg(e instanceof Error ? e.message : 'Disconnessione non riuscita');
     } finally {
       setSigningOut(false);
     }
   }
 
   async function createOrg() {
-    if (!newOrg.name.trim()) return setMsg('Organization name is required.');
+    if (!newOrg.name.trim()) return setMsg("Il nome dell'organizzazione è obbligatorio.");
     const payload = {
       name: newOrg.name.trim(),
       slug: (newOrg.slug || slugify(newOrg.name)).trim(),
@@ -124,7 +123,7 @@ export default function SuperAdminDashboard() {
       try {
         body = JSON.parse(text);
       } catch {
-        body = { error: `Invalid response (${res.status})` };
+        body = { error: `Risposta non valida (${res.status})` };
       }
 
       if (!res.ok || body.error) return setMsg(body.error ?? `HTTP ${res.status}`);
@@ -133,15 +132,15 @@ export default function SuperAdminDashboard() {
         setNewOrg({ name: '', slug: '' });
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Create org failed');
+      setMsg(e instanceof Error ? e.message : 'Creazione organizzazione non riuscita');
     } finally {
       setPending(false);
     }
   }
 
   async function createService() {
-    if (!svc.org_id) return setMsg('Select an organization.');
-    if (!svc.name.trim()) return setMsg('Service name is required.');
+    if (!svc.org_id) return setMsg('Seleziona un’organizzazione.');
+    if (!svc.name.trim()) return setMsg('Il nome del servizio è obbligatorio.');
 
     setPending(true);
     setMsg(null);
@@ -162,7 +161,7 @@ export default function SuperAdminDashboard() {
       try {
         body = JSON.parse(text);
       } catch {
-        body = { error: `Invalid response (${res.status})` };
+        body = { error: `Risposta non valida (${res.status})` };
       }
 
       if (!res.ok || body.error || !body.data) {
@@ -172,7 +171,7 @@ export default function SuperAdminDashboard() {
       setServices((x) => [body.data!, ...x]);
       setSvc({ org_id: '', name: '', description: '' });
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Create service failed');
+      setMsg(e instanceof Error ? e.message : 'Creazione servizio non riuscita');
     } finally {
       setPending(false);
     }
@@ -193,16 +192,16 @@ export default function SuperAdminDashboard() {
       try {
         body = JSON.parse(text);
       } catch {
-        body = { error: `Invalid response (${res.status})` };
+        body = { error: `Risposta non valida (${res.status})` };
       }
       if (!res.ok || body.error || !body.data) throw new Error(body.error ?? `HTTP ${res.status}`);
     } catch (e) {
       setTickets(prev);
-      setMsg(e instanceof Error ? e.message : 'Update status failed');
+      setMsg(e instanceof Error ? e.message : 'Aggiornamento stato non riuscito');
     }
   }
 
-  /* ---------- Derived KPI placeholders ---------- */
+  /* ---------- KPI derivati ---------- */
   const totalOrgs = orgs.length;
   const totalServices = services.length;
   const openTickets = tickets.filter((t) => t.status === 'OPEN').length;
@@ -211,10 +210,10 @@ export default function SuperAdminDashboard() {
   ).length;
 
   return (
-    <div className="grid gap-6 p-4">
+    <div className="p-4 sm:p-5">
       <PageHeader title="SuperAdmin — Dashboard" />
 
-      {/* Status banner */}
+      {/* Banner di stato */}
       {msg && (
         <div
           className={cn(
@@ -228,41 +227,41 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
-      {/* Top nav & actions */}
+      {/* Navigazione superiore & azioni (stack su mobile) */}
       <Tabs defaultValue="overview" className="w-full">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <TabsList className="h-9 bg-transparent">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="h-9 self-start bg-transparent">
             <TabsTrigger
               value="overview"
               className="data-[state=active]:bg-black data-[state=active]:text-white"
             >
-              Overview
+              Panoramica
             </TabsTrigger>
             <TabsTrigger
               value="organizations"
               className="data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              Organizations
+              Organizzazioni
             </TabsTrigger>
             <TabsTrigger
               value="services"
               className="data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              Services
+              Servizi
             </TabsTrigger>
             <TabsTrigger
               value="tickets"
               className="data-[state=active]:bg-white data-[state=active]:text-black"
             >
-              Tickets
+              Ticket
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button variant="outline" asChild className="gap-2">
               <a href="/api/export/tickets">
                 <Download className="h-4 w-4" />
-                Export CSV
+                Esporta CSV
               </a>
             </Button>
             <Button
@@ -272,70 +271,70 @@ export default function SuperAdminDashboard() {
               disabled={signingOut}
             >
               <LogOut className="h-4 w-4" />
-              {signingOut ? 'Signing out…' : 'Sign out'}
+              {signingOut ? 'Disconnessione…' : 'Esci'}
             </Button>
           </div>
         </div>
 
-        {/* KPI cards */}
-        <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* KPI (1 col su mobile) */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Organizations</CardTitle>
+              <CardTitle className="text-sm font-medium">Organizzazioni</CardTitle>
               <Building2 className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalOrgs}</div>
-              <p className="text-xs opacity-70">Total organizations</p>
+              <p className="text-xs opacity-70">Totale organizzazioni</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Services</CardTitle>
+              <CardTitle className="text-sm font-medium">Servizi</CardTitle>
               <Cog className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalServices}</div>
-              <p className="text-xs opacity-70">Across all orgs</p>
+              <p className="text-xs opacity-70">Su tutte le organizzazioni</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
+              <CardTitle className="text-sm font-medium">Ticket aperti</CardTitle>
               <Ticket className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{openTickets}</div>
-              <p className="text-xs opacity-70">Needing attention</p>
+              <p className="text-xs opacity-70">Richiedono attenzione</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">New this week</CardTitle>
+              <CardTitle className="text-sm font-medium">Nuovi questa settimana</CardTitle>
               <TrendingUp className="h-4 w-4 opacity-70" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{newThisWeek}</div>
-              <p className="text-xs opacity-70">Last 7 days</p>
+              <p className="text-xs opacity-70">Ultimi 7 giorni</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main grid */}
+        {/* Griglia principale (1 col su mobile; 2+1 su desktop) */}
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          {/* Organizations */}
+          {/* Organizzazioni */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Organizations</CardTitle>
-              <CardDescription>Create and list organizations.</CardDescription>
+              <CardTitle>Organizzazioni</CardTitle>
+              <CardDescription>Crea e visualizza le organizzazioni.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-4">
                 <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor="org_name">Organization name</Label>
+                  <Label htmlFor="org_name">Nome organizzazione</Label>
                   <Input
                     id="org_name"
                     placeholder="Acme Corp"
@@ -355,16 +354,16 @@ export default function SuperAdminDashboard() {
                 <div className="flex items-end">
                   <Button onClick={createOrg} disabled={pending} className="w-full gap-2">
                     <ShieldPlus className="h-4 w-4" />
-                    {pending ? 'Working…' : 'Create'}
+                    {pending ? 'Operazione…' : 'Crea'}
                   </Button>
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-[rgb(var(--border))]">
-                <Table>
+              <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
+                <Table className="min-w-[480px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-left">Name</TableHead>
+                      <TableHead className="text-left">Nome</TableHead>
                       <TableHead>Slug</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -378,25 +377,27 @@ export default function SuperAdminDashboard() {
                   </TableBody>
                 </Table>
                 {orgs.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">No organizations yet.</div>
+                  <div className="p-8 text-center text-sm opacity-70">
+                    Nessuna organizzazione ancora.
+                  </div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Services */}
+          {/* Servizi */}
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle>Services</CardTitle>
-              <CardDescription>Add a service and see recent ones.</CardDescription>
+              <CardTitle>Servizi</CardTitle>
+              <CardDescription>Aggiungi un servizio e vedi gli ultimi creati.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
-                  <Label>Organization</Label>
+                  <Label>Organizzazione</Label>
                   <Select value={svc.org_id} onValueChange={(v) => setSvc({ ...svc, org_id: v })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select org" />
+                      <SelectValue placeholder="Seleziona org" />
                     </SelectTrigger>
                     <SelectContent>
                       {orgs.map((o) => (
@@ -408,36 +409,36 @@ export default function SuperAdminDashboard() {
                   </Select>
                 </div>
                 <div className="mr-2 space-y-1 sm:col-span-2">
-                  <Label htmlFor="svc_name">Service name</Label>
+                  <Label htmlFor="svc_name">Nome servizio</Label>
                   <Input
                     id="svc_name"
-                    placeholder="On-site support"
+                    placeholder="Assistenza on-site"
                     value={svc.name}
                     onChange={(e) => setSvc({ ...svc, name: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor="svc_desc">Description</Label>
+                  <Label htmlFor="svc_desc">Descrizione</Label>
                   <Input
                     id="svc_desc"
-                    placeholder="Short description"
+                    placeholder="Descrizione breve"
                     value={svc.description}
                     onChange={(e) => setSvc({ ...svc, description: e.target.value })}
                   />
                 </div>
                 <div className="flex items-end">
                   <Button onClick={createService} disabled={pending} className="w-full">
-                    {pending ? 'Adding…' : 'Add'}
+                    {pending ? 'Aggiunta…' : 'Aggiungi'}
                   </Button>
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-[rgb(var(--border))]">
-                <Table>
+              <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
+                <Table className="min-w-[520px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-left">Service</TableHead>
-                      <TableHead>Organization</TableHead>
+                      <TableHead className="text-left">Servizio</TableHead>
+                      <TableHead>Organizzazione</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -452,28 +453,28 @@ export default function SuperAdminDashboard() {
                   </TableBody>
                 </Table>
                 {services.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">No services yet.</div>
+                  <div className="p-8 text-center text-sm opacity-70">Nessun servizio ancora.</div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Tickets */}
+          {/* Ticket */}
           <Card className="lg:col-span-3">
             <CardHeader>
-              <CardTitle>All Tickets</CardTitle>
-              <CardDescription>Manage statuses across the platform.</CardDescription>
+              <CardTitle>Tutti i ticket</CardTitle>
+              <CardDescription>Gestisci gli stati in tutta la piattaforma.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-hidden rounded-xl border border-[rgb(var(--border))]">
-                <Table>
+              <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Org</TableHead>
                       <TableHead>Ticket</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-left">Notes</TableHead>
-                      <TableHead>Created</TableHead>
+                      <TableHead>Stato</TableHead>
+                      <TableHead className="text-left">Note</TableHead>
+                      <TableHead>Creato</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -505,7 +506,7 @@ export default function SuperAdminDashboard() {
                   </TableBody>
                 </Table>
                 {tickets.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">No tickets yet.</div>
+                  <div className="p-8 text-center text-sm opacity-70">Nessun ticket ancora.</div>
                 )}
               </div>
             </CardContent>
