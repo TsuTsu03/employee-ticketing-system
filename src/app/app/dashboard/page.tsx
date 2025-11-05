@@ -108,7 +108,7 @@ function MessageBubble({ role, children }: { role: MsgRole; children: React.Reac
   );
 }
 
-// Horizontal quick chips (thumb-sized touch targets + overflow-x)
+// Quick Action chips – wrap on small screens so nothing gets cut
 function QuickChips({ onAction }: { onAction: (a: ChatButton['action']) => void }) {
   const items: Array<{ label: string; action: ChatButton['action'] }> = [
     { label: 'Inizia Lavoro', action: 'start' },
@@ -117,8 +117,8 @@ function QuickChips({ onAction }: { onAction: (a: ChatButton['action']) => void 
     { label: 'Invia Segnalazione', action: 'ticket' },
   ];
   return (
-    <div className="no-scrollbar -mx-2 overflow-x-auto px-2">
-      <div className="flex gap-2 pb-1">
+    <div className="px-2">
+      <div className="flex w-full flex-wrap gap-2">
         {items.map((it) => (
           <Button
             key={it.label}
@@ -835,7 +835,7 @@ export default function EmployeeDashboard() {
           {/* Chat area (independent scroll, roomy tap targets) */}
           <div className="flex-1 overflow-hidden">
             <ChatContainer className="h-full">
-              {/* Empty: greeting + horizontal chips */}
+              {/* Empty: greeting + quick chips */}
               {isEmpty && (
                 <div className="space-y-3 px-3 pt-3 sm:px-4 sm:pt-5">
                   <h2 className="text-base font-semibold sm:text-lg">
@@ -964,9 +964,12 @@ export default function EmployeeDashboard() {
                 </div>
               )}
 
+              {/* ---- Spacer to keep content above the sticky input (important on empty chat) ---- */}
+              <div className="h-[88px] sm:h-[72px]" aria-hidden />
+
               {/* Input (sticky, safe-area padding for iOS) */}
               <ChatForm
-                className="bg-background sticky bottom-0 z-30 mt-auto border-t px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+8px)]"
+                className="bg-background sticky bottom-0 z-30 mt-auto border-t px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)]"
                 isPending={false}
                 handleSubmit={handleChatSubmit}
               >
