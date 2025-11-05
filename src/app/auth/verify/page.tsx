@@ -128,7 +128,7 @@ function VerifyClient() {
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && setNewPassword()}
           />
-          <button className="btn btn--primary" onClick={setNewPassword} disabled={pending}>
+          <button className="btn" onClick={setNewPassword} disabled={pending}>
             {pending ? 'Saving…' : 'Save password'}
           </button>
         </div>

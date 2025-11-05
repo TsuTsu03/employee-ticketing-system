@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createBrowserSupabase } from '@/lib/supabase-browser';
+import { useRouter } from 'next/navigation';
 
 import { ChatContainer, ChatForm } from '@/components/ui/chat';
 import { MessageInput } from '@/components/ui/message-input';
@@ -600,9 +601,21 @@ export default function EmployeeDashboard() {
     setInput('');
     setTicketDraft({ serviceId: '', notes: '', sending: false });
   }
+
+  const router = useRouter();
   async function logout() {
-    await supabase.auth.signOut();
-    window.location.reload();
+    // Best effort: clear client session (local memory / broadcast tabs)
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+
+    // Critical: clear server cookies
+    try {
+      await fetch('/api/auth/signout', { method: 'POST' });
+    } catch {}
+
+    // Send user to login (and avoid a stale, cached page)
+    router.replace('/auth/login?signout=1');
   }
   const initials = (userEmail ?? 'U').slice(0, 2).toUpperCase();
 

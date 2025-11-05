@@ -103,10 +103,8 @@ export default function LoginPage() {
               {/* input shell */}
               <div
                 className={[
-                  'relative flex h-11 items-center rounded-xl border px-3',
-                  'border-[rgb(var(--border))] transition',
-                  // bolder focus state
-                  'focus-within:border-[rgb(var(--primary))] focus-within:ring-2 focus-within:ring-[rgb(var(--primary))]',
+                  'relative flex h-11 items-center rounded-xl border pl-3',
+                  'border-[rgb(var(--border))]',
                 ].join(' ')}
               >
                 <span className="pointer-events-none absolute left-3 inline-flex items-center text-[rgb(var(--muted))]">
