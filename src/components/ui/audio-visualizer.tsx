@@ -12,7 +12,11 @@ function createAudioContext(): AudioContext {
   return new Ctor();
 }
 
-export function AudioVisualizer() {
+export function AudioVisualizer(
+  // Props are accepted for call-site compatibility; the component manages its
+  // own microphone stream internally.
+  _props: { stream?: MediaStream | null; isRecording?: boolean; onClick?: () => void } = {}
+) {
   // <-- named export
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);

@@ -1,12 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Type errors now fail the build — the codebase is type-clean (npx tsc --noEmit).
   typescript: {
-    // ❗ build will still succeed even if there are type errors
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
+  // ESLint is run separately; don't block builds on lint.
   eslint: {
-    // ❗ skip ESLint during build
     ignoreDuringBuilds: true,
   },
 };
-module.exports = nextConfig;
+
+export default nextConfig;

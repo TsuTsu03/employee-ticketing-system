@@ -46,7 +46,8 @@ const COMPONENTS: Components = {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src ?? ''} alt={alt ?? ''} className="my-2 max-w-full rounded-lg border" {...props} />
   ),
-  code: ({ node, inline, className, children, ...props }) => {
+  code: ({ node, className, children, ...props }) => {
+    const inline = (props as { inline?: boolean }).inline;
     if (inline) {
       return (
         <code className="bg-muted rounded px-1 py-0.5 text-[0.9em]" {...props}>

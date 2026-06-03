@@ -10,5 +10,5 @@ export default async function Page() {
   const { user, role } = await getCurrentUserRole();
   if (!user) redirect('/auth/login');
   if (role !== 'SUPER_ADMIN') redirect('/portal');
-  return <SuperAdminDashboard />;
+  return <SuperAdminDashboard email={user.email ?? null} />;
 }

@@ -1,16 +1,23 @@
-// File: app/superadmin/dashboard/page.tsx
 'use client';
 
+import { Building2, Download, Inbox, Loader2, Plus, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserSupabase } from '@/lib/supabase-browser';
-import PageHeader from '@/components/ui/PageHeader';
+import { toast } from 'sonner';
 
-/* shadcn/ui */
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { StatCard } from '@/components/app/stat-card';
+import { PriorityBadge, StatusBadge } from '@/components/app/ticket-badges';
+import { Topbar } from '@/components/app/topbar';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -19,30 +26,30 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { fmtRelative } from '@/lib/format';
+import { createBrowserSupabase } from '@/lib/supabase-browser';
 import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+  STATUS_LABEL,
+  TICKET_STATUSES,
+  normalizePriority,
+  normalizeStatus,
+  type TicketPriority,
+  type TicketStatus,
+} from '@/lib/tickets';
 
-/* icone */
-import { Building2, Cog, Ticket, Download, ShieldPlus, LogOut, TrendingUp } from 'lucide-react';
-
-/* ---------- Tipi ---------- */
 type Org = { id: string; name: string; slug: string; is_active?: boolean };
 type Service = { id: string; org_id: string; name: string; description: string | null };
 type TicketRow = {
   id: string;
   org_id: string;
-  status: string;
+  title: string | null;
   description: string | null;
+  status: TicketStatus;
+  priority: TicketPriority;
   created_at: string;
 };
 
-/* ---------- Util ---------- */
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -50,23 +57,16 @@ const slugify = (s: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
-function cn(...cls: Array<string | false | undefined>) {
-  return cls.filter(Boolean).join(' ');
-}
-
-/* ---------- Componente ---------- */
-export default function SuperAdminDashboard() {
+export default function SuperAdminDashboard({ email }: { email: string | null }) {
   const supabase = useMemo(() => createBrowserSupabase(), []);
-  const router = useRouter();
 
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newOrg, setNewOrg] = useState({ name: '', slug: '' });
   const [svc, setSvc] = useState({ org_id: '', name: '', description: '' });
   const [pending, setPending] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
 
   const orgNameById = useMemo(
     () => Object.fromEntries(orgs.map((o) => [o.id, o.name] as const)),
@@ -79,72 +79,56 @@ export default function SuperAdminDashboard() {
         const [{ data: o }, { data: s }, { data: t }] = await Promise.all([
           supabase.from('organizations').select('*').order('name'),
           supabase.from('services').select('*').order('name'),
-          supabase.from('tickets').select('*').order('created_at', { ascending: false }),
+          supabase
+            .from('tickets')
+            .select('id, org_id, title, description, status, priority, created_at')
+            .order('created_at', { ascending: false }),
         ]);
         setOrgs((o as Org[]) ?? []);
         setServices((s as Service[]) ?? []);
-        setTickets((t as TicketRow[]) ?? []);
+        setTickets(
+          ((t as TicketRow[]) ?? []).map((row) => ({
+            ...row,
+            status: normalizeStatus(row.status),
+            priority: normalizePriority(row.priority),
+          }))
+        );
       } catch (e) {
-        setMsg(e instanceof Error ? e.message : 'Impossibile caricare i dati');
+        toast.error(e instanceof Error ? e.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
       }
     })();
   }, [supabase]);
 
-  async function handleSignOut() {
-    try {
-      setSigningOut(true);
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      router.push('/auth/login');
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Disconnessione non riuscita');
-    } finally {
-      setSigningOut(false);
-    }
-  }
-
   async function createOrg() {
-    if (!newOrg.name.trim()) return setMsg("Il nome dell'organizzazione è obbligatorio.");
-    const payload = {
-      name: newOrg.name.trim(),
-      slug: (newOrg.slug || slugify(newOrg.name)).trim(),
-    };
+    if (!newOrg.name.trim()) return toast.error('Organization name is required');
     setPending(true);
-    setMsg(null);
     try {
       const res = await fetch('/api/organizations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name: newOrg.name.trim(),
+          slug: (newOrg.slug || slugify(newOrg.name)).trim(),
+        }),
       });
-
-      const text = await res.text();
-      let body: { data?: Org; error?: string } = {};
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = { error: `Risposta non valida (${res.status})` };
-      }
-
-      if (!res.ok || body.error) return setMsg(body.error ?? `HTTP ${res.status}`);
-      if (body.data) {
-        setOrgs((x) => [body.data!, ...x]);
-        setNewOrg({ name: '', slug: '' });
-      }
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error || !json.data) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setOrgs((x) => [json.data as Org, ...x]);
+      setNewOrg({ name: '', slug: '' });
+      toast.success('Organization created');
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Creazione organizzazione non riuscita');
+      toast.error(e instanceof Error ? e.message : 'Could not create organization');
     } finally {
       setPending(false);
     }
   }
 
   async function createService() {
-    if (!svc.org_id) return setMsg('Seleziona un’organizzazione.');
-    if (!svc.name.trim()) return setMsg('Il nome del servizio è obbligatorio.');
-
+    if (!svc.org_id) return toast.error('Select an organization');
+    if (!svc.name.trim()) return toast.error('Service name is required');
     setPending(true);
-    setMsg(null);
-
     try {
       const res = await fetch('/api/services', {
         method: 'POST',
@@ -152,33 +136,22 @@ export default function SuperAdminDashboard() {
         body: JSON.stringify({
           org_id: svc.org_id,
           name: svc.name.trim(),
-          description: svc.description.trim() ? svc.description.trim() : null,
+          description: svc.description.trim() || null,
         }),
       });
-
-      const text = await res.text();
-      let body: { data?: Service; error?: string } = {};
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = { error: `Risposta non valida (${res.status})` };
-      }
-
-      if (!res.ok || body.error || !body.data) {
-        return setMsg(body.error ?? `HTTP ${res.status}`);
-      }
-
-      setServices((x) => [body.data!, ...x]);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error || !json.data) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setServices((x) => [json.data as Service, ...x]);
       setSvc({ org_id: '', name: '', description: '' });
+      toast.success('Service added');
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Creazione servizio non riuscita');
+      toast.error(e instanceof Error ? e.message : 'Could not add service');
     } finally {
       setPending(false);
     }
   }
 
-  async function setStatus(id: string, status: string) {
-    setMsg(null);
+  async function setStatus(id: string, status: TicketStatus) {
     const prev = tickets;
     setTickets((ts) => ts.map((t) => (t.id === id ? { ...t, status } : t)));
     try {
@@ -187,217 +160,206 @@ export default function SuperAdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      const text = await res.text();
-      let body: { data?: { status: string }; error?: string } = {};
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = { error: `Risposta non valida (${res.status})` };
-      }
-      if (!res.ok || body.error || !body.data) throw new Error(body.error ?? `HTTP ${res.status}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
     } catch (e) {
       setTickets(prev);
-      setMsg(e instanceof Error ? e.message : 'Aggiornamento stato non riuscito');
+      toast.error(e instanceof Error ? e.message : 'Could not update status');
     }
   }
 
-  /* ---------- KPI derivati ---------- */
-  const totalOrgs = orgs.length;
-  const totalServices = services.length;
   const openTickets = tickets.filter((t) => t.status === 'OPEN').length;
   const newThisWeek = tickets.filter(
     (t) => Date.now() - new Date(t.created_at).getTime() < 7 * 864e5
   ).length;
 
   return (
-    <div className="p-4 sm:p-5">
-      <PageHeader title="SuperAdmin — Dashboard" />
+    <div className="bg-muted/30 min-h-screen">
+      <Topbar title="ShiftDesk" badge="Super Admin" email={email} />
 
-      {/* Banner di stato */}
-      {msg && (
-        <div
-          className={cn(
-            'rounded-md border px-3 py-2 text-sm',
-            'border-white/20 bg-white/5 text-white'
-          )}
-          role="status"
-          aria-live="polite"
-        >
-          {msg}
+      <main className="container-page py-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Platform overview</h1>
+          <p className="text-muted-foreground text-sm">
+            Manage organizations, services, and tickets across ShiftDesk.
+          </p>
         </div>
-      )}
 
-      {/* Navigazione superiore & azioni (stack su mobile) */}
-      <Tabs defaultValue="overview" className="w-full">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <TabsList className="h-9 self-start bg-transparent">
-            <TabsTrigger
-              value="overview"
-              className="data-[state=active]:bg-black data-[state=active]:text-white"
-            >
-              Panoramica
-            </TabsTrigger>
-            <TabsTrigger
-              value="organizations"
-              className="data-[state=active]:bg-white data-[state=active]:text-black"
-            >
-              Organizzazioni
-            </TabsTrigger>
-            <TabsTrigger
-              value="services"
-              className="data-[state=active]:bg-white data-[state=active]:text-black"
-            >
-              Servizi
-            </TabsTrigger>
-            <TabsTrigger
-              value="tickets"
-              className="data-[state=active]:bg-white data-[state=active]:text-black"
-            >
-              Ticket
-            </TabsTrigger>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Organizations" value={orgs.length} icon={Building2} />
+          <StatCard label="Services" value={services.length} icon={Wrench} accent="sky" />
+          <StatCard label="Open tickets" value={openTickets} icon={Inbox} accent="amber" />
+          <StatCard label="New this week" value={newThisWeek} icon={Plus} accent="emerald" />
+        </div>
+
+        <Tabs defaultValue="tickets" className="mt-6">
+          <TabsList>
+            <TabsTrigger value="tickets">Tickets</TabsTrigger>
+            <TabsTrigger value="organizations">Organizations</TabsTrigger>
+            <TabsTrigger value="services">Services</TabsTrigger>
           </TabsList>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button variant="outline" asChild className="gap-2">
-              <a href="/api/export/tickets">
-                <Download className="h-4 w-4" />
-                Esporta CSV
-              </a>
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={handleSignOut}
-              disabled={signingOut}
-            >
-              <LogOut className="h-4 w-4" />
-              {signingOut ? 'Disconnessione…' : 'Esci'}
-            </Button>
-          </div>
-        </div>
+          {/* Tickets */}
+          <TabsContent value="tickets" className="mt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>All tickets</CardTitle>
+                    <CardDescription>Manage statuses platform-wide.</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" asChild className="gap-2">
+                    <a href="/api/export/tickets">
+                      <Download className="size-4" /> CSV
+                    </a>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[760px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Ticket</TableHead>
+                        <TableHead>Organization</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead className="w-[160px]">Status</TableHead>
+                        <TableHead className="text-right">Created</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tickets.map((t) => (
+                        <TableRow key={t.id}>
+                          <TableCell className="max-w-[280px]">
+                            <div className="truncate font-medium">{t.title || 'Ticket'}</div>
+                            <div className="text-muted-foreground truncate text-xs">
+                              {t.description}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {orgNameById[t.org_id] ?? `${t.org_id.slice(0, 8)}…`}
+                          </TableCell>
+                          <TableCell>
+                            <PriorityBadge priority={t.priority} />
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={t.status}
+                              onValueChange={(v) => setStatus(t.id, v as TicketStatus)}
+                            >
+                              <SelectTrigger className="h-8 w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {TICKET_STATUSES.map((s) => (
+                                  <SelectItem key={s} value={s}>
+                                    {STATUS_LABEL[s]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-right text-xs">
+                            {fmtRelative(t.created_at)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                {!loading && tickets.length === 0 && (
+                  <div className="text-muted-foreground p-10 text-center text-sm">
+                    No tickets yet.
+                  </div>
+                )}
+                {loading && (
+                  <div className="text-muted-foreground flex items-center justify-center gap-2 p-10 text-sm">
+                    <Loader2 className="size-4 animate-spin" /> Loading…
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* KPI (1 col su mobile) */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card className="shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Organizzazioni</CardTitle>
-              <Building2 className="h-4 w-4 opacity-70" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalOrgs}</div>
-              <p className="text-xs opacity-70">Totale organizzazioni</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Servizi</CardTitle>
-              <Cog className="h-4 w-4 opacity-70" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalServices}</div>
-              <p className="text-xs opacity-70">Su tutte le organizzazioni</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ticket aperti</CardTitle>
-              <Ticket className="h-4 w-4 opacity-70" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{openTickets}</div>
-              <p className="text-xs opacity-70">Richiedono attenzione</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Nuovi questa settimana</CardTitle>
-              <TrendingUp className="h-4 w-4 opacity-70" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{newThisWeek}</div>
-              <p className="text-xs opacity-70">Ultimi 7 giorni</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Griglia principale (1 col su mobile; 2+1 su desktop) */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          {/* Organizzazioni */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Organizzazioni</CardTitle>
-              <CardDescription>Crea e visualizza le organizzazioni.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="space-y-1 sm:col-span-2">
-                  <Label htmlFor="org_name">Nome organizzazione</Label>
+          {/* Organizations */}
+          <TabsContent value="organizations" className="mt-4 grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <CardTitle>New organization</CardTitle>
+                <CardDescription>Create a tenant workspace.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="org-name">Name</Label>
                   <Input
-                    id="org_name"
+                    id="org-name"
                     placeholder="Acme Corp"
                     value={newOrg.name}
                     onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="org_slug">Slug</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="org-slug">Slug</Label>
                   <Input
-                    id="org_slug"
+                    id="org-slug"
                     placeholder="acme"
                     value={newOrg.slug}
                     onChange={(e) => setNewOrg({ ...newOrg, slug: e.target.value })}
                   />
                 </div>
-                <div className="flex items-end">
-                  <Button onClick={createOrg} disabled={pending} className="w-full gap-2">
-                    <ShieldPlus className="h-4 w-4" />
-                    {pending ? 'Operazione…' : 'Crea'}
-                  </Button>
-                </div>
-              </div>
+                <Button onClick={createOrg} disabled={pending} className="w-full gap-2">
+                  {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  Create
+                </Button>
+              </CardContent>
+            </Card>
 
-              <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
-                <Table className="min-w-[480px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-left">Nome</TableHead>
-                      <TableHead>Slug</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orgs.map((o) => (
-                      <TableRow key={o.id}>
-                        <TableCell className="text-sm">{o.name}</TableCell>
-                        <TableCell className="text-xs opacity-70">/{o.slug}</TableCell>
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Organizations</CardTitle>
+                <CardDescription>{orgs.length} total.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[420px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Slug</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {orgs.map((o) => (
+                        <TableRow key={o.id}>
+                          <TableCell className="text-sm font-medium">{o.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-xs">/{o.slug}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
                 {orgs.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">
-                    Nessuna organizzazione ancora.
+                  <div className="text-muted-foreground p-10 text-center text-sm">
+                    No organizations yet.
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          {/* Servizi */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle>Servizi</CardTitle>
-              <CardDescription>Aggiungi un servizio e vedi gli ultimi creati.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="space-y-1">
-                  <Label>Organizzazione</Label>
+          {/* Services */}
+          <TabsContent value="services" className="mt-4 grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-1">
+              <CardHeader>
+                <CardTitle>New service</CardTitle>
+                <CardDescription>A category employees raise tickets against.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Organization</Label>
                   <Select value={svc.org_id} onValueChange={(v) => setSvc({ ...svc, org_id: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona org" />
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select organization" />
                     </SelectTrigger>
                     <SelectContent>
                       {orgs.map((o) => (
@@ -408,111 +370,67 @@ export default function SuperAdminDashboard() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="mr-2 space-y-1 sm:col-span-2">
-                  <Label htmlFor="svc_name">Nome servizio</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="svc-name">Name</Label>
                   <Input
-                    id="svc_name"
-                    placeholder="Assistenza on-site"
+                    id="svc-name"
+                    placeholder="On-site support"
                     value={svc.name}
                     onChange={(e) => setSvc({ ...svc, name: e.target.value })}
                   />
                 </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label htmlFor="svc_desc">Descrizione</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="svc-desc">Description</Label>
                   <Input
-                    id="svc_desc"
-                    placeholder="Descrizione breve"
+                    id="svc-desc"
+                    placeholder="Short description"
                     value={svc.description}
                     onChange={(e) => setSvc({ ...svc, description: e.target.value })}
                   />
                 </div>
-                <div className="flex items-end">
-                  <Button onClick={createService} disabled={pending} className="w-full">
-                    {pending ? 'Aggiunta…' : 'Aggiungi'}
-                  </Button>
+                <Button onClick={createService} disabled={pending} className="w-full gap-2">
+                  {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  Add service
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Services</CardTitle>
+                <CardDescription>{services.length} across all organizations.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[480px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Service</TableHead>
+                        <TableHead>Organization</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {services.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="text-sm font-medium">{s.name}</TableCell>
+                          <TableCell className="text-muted-foreground text-xs">
+                            {orgNameById[s.org_id] ?? s.org_id.slice(0, 8)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
-                <Table className="min-w-[520px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-left">Servizio</TableHead>
-                      <TableHead>Organizzazione</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {services.slice(0, 9).map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="text-sm">{s.name}</TableCell>
-                        <TableCell className="text-xs opacity-70">
-                          {orgNameById[s.org_id] ?? s.org_id.slice(0, 8)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
                 {services.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">Nessun servizio ancora.</div>
+                  <div className="text-muted-foreground p-10 text-center text-sm">
+                    No services yet.
+                  </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Ticket */}
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardTitle>Tutti i ticket</CardTitle>
-              <CardDescription>Gestisci gli stati in tutta la piattaforma.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
-                <Table className="min-w-[720px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Org</TableHead>
-                      <TableHead>Ticket</TableHead>
-                      <TableHead>Stato</TableHead>
-                      <TableHead className="text-left">Note</TableHead>
-                      <TableHead>Creato</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tickets.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell className="text-xs opacity-70">
-                          {orgNameById[t.org_id] ?? `${t.org_id.slice(0, 8)}…`}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{t.id.slice(0, 8)}…</TableCell>
-                        <TableCell>
-                          <Select value={t.status} onValueChange={(v) => setStatus(t.id, v)}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="OPEN">OPEN</SelectItem>
-                              <SelectItem value="IN_PROGRESS">IN_PROGRESS</SelectItem>
-                              <SelectItem value="COMPLETED">COMPLETED</SelectItem>
-                              <SelectItem value="CLOSED">CLOSED</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-sm">{t.description}</TableCell>
-                        <TableCell className="text-sm">
-                          {new Date(t.created_at).toLocaleString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {tickets.length === 0 && (
-                  <div className="p-8 text-center text-sm opacity-70">Nessun ticket ancora.</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </Tabs>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </main>
     </div>
   );
 }

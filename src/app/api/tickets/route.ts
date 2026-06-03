@@ -4,13 +4,17 @@ import { CookieOptions, createServerClient } from '@supabase/ssr';
 
 const Body = z.object({
   service_id: z.string().uuid(),
+  title: z.string().trim().min(1).max(120).optional(),
   description: z.string().trim().min(1),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
 });
 
 type TicketRow = {
   id: string;
+  title: string | null;
   description: string | null;
   status: string;
+  priority: string;
   created_at: string;
 };
 
@@ -42,7 +46,7 @@ export async function sb() {
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return err('Invalid payload', 422);
-  const { service_id, description } = parsed.data;
+  const { service_id, title, description, priority } = parsed.data;
 
   const supabase = await sb();
 
@@ -83,10 +87,12 @@ export async function POST(req: Request) {
       org_id: membership.org_id,
       employee_id: user.id,
       service_id,
+      title: title ?? description.slice(0, 80),
       description,
+      priority,
       status: 'OPEN',
     })
-    .select('id, description, status, created_at') // do NOT call .single()
+    .select('id, title, description, status, priority, created_at') // do NOT call .single()
     .limit(1); // just to be safe
 
   if (tErr) return err(tErr.message, 400);

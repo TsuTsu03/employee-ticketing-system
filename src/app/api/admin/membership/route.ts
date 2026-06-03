@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
+
+import { getUser, isOrgAdmin, routeClient } from '@/lib/api-auth';
 import type { ApiResult } from '@/types/db';
 
 const srv = createClient(
@@ -20,6 +22,21 @@ export async function PATCH(req: Request) {
     return NextResponse.json<ApiResult<never>>({ error: 'Invalid payload' }, { status: 422 });
   }
   const { user_id, org_id, role } = parsed.data;
+
+  // AuthZ: only an admin of this org (or any super admin) may change roles.
+  const supabase = await routeClient();
+  const me = await getUser(supabase);
+  if (!me) return NextResponse.json<ApiResult<never>>({ error: 'Unauthorized' }, { status: 401 });
+  if (!(await isOrgAdmin(supabase, me.id, org_id))) {
+    return NextResponse.json<ApiResult<never>>({ error: 'Forbidden' }, { status: 403 });
+  }
+  // Only super admins can grant the SUPER_ADMIN role.
+  if (role === 'SUPER_ADMIN') {
+    const { data } = await supabase.from('memberships').select('role').eq('user_id', me.id);
+    const isSuper = (data ?? []).some((m) => (m as { role: string }).role === 'SUPER_ADMIN');
+    if (!isSuper)
+      return NextResponse.json<ApiResult<never>>({ error: 'Forbidden' }, { status: 403 });
+  }
 
   try {
     const { error } = await srv
